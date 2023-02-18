@@ -1,115 +1,203 @@
+//import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:kakaomap_webview/kakaomap_webview.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const App());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class App extends StatelessWidget {
+  const App({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      home: HomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class CustomTextInput extends StatelessWidget {
+  const CustomTextInput({
+    super.key,
+    required this.width,
+    required this.labelText,
+    required this.textController,
+    required this.keyboardType,
+    required this.minLines,
+    required this.maxLines,
+  });
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  final double width;
+  final String labelText;
+  final TextEditingController textController;
+  final TextInputType keyboardType;
+  final int minLines;
+  final int maxLines;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    return Container(
+        width: width,
+        margin: const EdgeInsets.all(5),
+        child: TextField(
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            labelText: labelText,
+          ),
+          textAlign: TextAlign.center,
+          controller: textController,
+          keyboardType: TextInputType.multiline,
+          minLines: 1,
+          maxLines: 5,
+        ));
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+//https://developers.kakao.com/console/app/864339
+const String kakaoMapKey = '9d5ef64973f9061b58614170830a2cb3';
 
-  void _incrementCounter() {
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => HomePageState();
+}
+
+class HomePageState extends State<HomePage> {
+  Position? position;
+  final titleTextController = TextEditingController();
+  final contentTextController = TextEditingController();
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  Future initializeNotificationPlugin() async {
+    var initializationSettingsAndroid =
+        const AndroidInitializationSettings('@mipmap/ic_launcher');
+    var initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestPermission();
+    await showNotification();
+  }
+
+  Future showNotification() async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails("reminder", "리마인더",
+            channelDescription: "리마인더: 기록하세요",
+            importance: Importance.max,
+            priority: Priority.max,
+            showWhen: true);
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
+
+    await flutterLocalNotificationsPlugin.periodicallyShow(
+        0,
+        "REMINDER",
+        "",
+        RepeatInterval.hourly,
+        //RepeatInterval.everyMinute,
+        platformChannelSpecifics,
+        androidAllowWhileIdle: true);
+  }
+
+  Future getPosition() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      position = null;
+    });
+    bool serviceEnabled;
+    LocationPermission permission;
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled.');
+    }
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return Future.error('Location permissions are denied');
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      return Future.error(
+          'Location permissions are permanently denied, we cannot request permissions.');
+    }
+    Position newPosition = await Geolocator.getCurrentPosition();
+    setState(() {
+      position = newPosition;
     });
   }
 
   @override
+  void initState() {
+    super.initState();
+    initializeNotificationPlugin();
+    getPosition();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    Widget component;
+    if (position != null) {
+      Size size = MediaQuery.of(context).size;
+      double textInputW = size.width * 0.8;
+      double mapW = size.width;
+      double mapH = size.height * 0.3;
+
+      component = Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          KakaoMapView(
+            width: mapW,
+            height: mapH,
+            kakaoMapKey: kakaoMapKey,
+            lat: position?.latitude ?? 133,
+            lng: position?.longitude ?? 60,
+            zoomLevel: 2,
+            showMapTypeControl: false,
+            showZoomControl: false,
+          ),
+          CustomTextInput(
+            width: textInputW,
+            labelText: "제목",
+            textController: titleTextController,
+            keyboardType: TextInputType.multiline,
+            minLines: 1,
+            maxLines: 1,
+          ),
+          CustomTextInput(
+            width: textInputW,
+            labelText: "내용",
+            textController: contentTextController,
+            keyboardType: TextInputType.multiline,
+            minLines: 1,
+            maxLines: 5,
+          ),
+          ElevatedButton(
+              onPressed: () {
+                print(
+                    '${titleTextController.text} ${contentTextController.text}');
+              },
+              child: const Text('완료'))
+        ],
+      );
+    } else {
+      component = const Center(
+          child: Text("Loading...", style: TextStyle(fontSize: 25)));
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
+      body: SafeArea(child: component),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+        onPressed: getPosition,
+        child: const Icon(Icons.refresh),
+      ),
     );
   }
 }
