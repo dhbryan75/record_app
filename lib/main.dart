@@ -1,8 +1,10 @@
-//import 'dart:collection';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kakaomap_webview/kakaomap_webview.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
+import 'package:fluttertoast/fluttertoast.dart';
 
 void main() {
   runApp(const App());
@@ -106,6 +108,12 @@ class HomePageState extends State<HomePage> {
         androidAllowWhileIdle: true);
   }
 
+  Future resetNotification() async {
+    await flutterLocalNotificationsPlugin.cancel(0);
+    await showNotification();
+    toast("알림 리셋 완료");
+  }
+
   Future getPosition() async {
     setState(() {
       position = null;
@@ -131,6 +139,51 @@ class HomePageState extends State<HomePage> {
     setState(() {
       position = newPosition;
     });
+    toast("위치 새로고침 완료");
+  }
+
+  void toast(message) {
+    Fluttertoast.showToast(
+        msg: message,
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.CENTER,
+        timeInSecForIosWeb: 1,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0);
+  }
+
+  void alert(title, content) {
+    showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+              title: Text(title),
+              content: Text(content),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text("확인"))
+              ],
+            ));
+  }
+
+  Future postRecord(latitude, longitude, title, content) async {
+    var url = Uri.http('3.37.230.24', 'api/record');
+    var body = json.encode({
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+      'title': title,
+      'content': content,
+    });
+    var response = await http.post(url,
+        headers: {"Content-Type": "application/json"}, body: body);
+    if (response.statusCode == 200) {
+      toast("기록 완료");
+    } else {
+      alert('${response.statusCode}', response.body);
+    }
   }
 
   @override
@@ -142,60 +195,76 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    Widget component;
+    Widget body;
     if (position != null) {
       Size size = MediaQuery.of(context).size;
       double textInputW = size.width * 0.8;
       double mapW = size.width;
       double mapH = size.height * 0.3;
 
-      component = Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          KakaoMapView(
-            width: mapW,
-            height: mapH,
-            kakaoMapKey: kakaoMapKey,
-            lat: position?.latitude ?? 133,
-            lng: position?.longitude ?? 60,
-            zoomLevel: 2,
-            showMapTypeControl: false,
-            showZoomControl: false,
+      body = Stack(children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            KakaoMapView(
+              width: mapW,
+              height: mapH,
+              kakaoMapKey: kakaoMapKey,
+              lat: position?.latitude ?? 133,
+              lng: position?.longitude ?? 60,
+              zoomLevel: 2,
+              showMapTypeControl: false,
+              showZoomControl: false,
+            ),
+            CustomTextInput(
+              width: textInputW,
+              labelText: "제목",
+              textController: titleTextController,
+              keyboardType: TextInputType.multiline,
+              minLines: 1,
+              maxLines: 1,
+            ),
+            CustomTextInput(
+              width: textInputW,
+              labelText: "내용",
+              textController: contentTextController,
+              keyboardType: TextInputType.multiline,
+              minLines: 1,
+              maxLines: 5,
+            ),
+            ElevatedButton(
+                onPressed: () {
+                  postRecord(position?.latitude, position?.longitude,
+                      titleTextController.text, contentTextController.text);
+                },
+                style: ElevatedButton.styleFrom(primary: Colors.deepOrange),
+                child: const Text(
+                  '완료',
+                  style: TextStyle(fontSize: 18),
+                )),
+          ],
+        ),
+        Positioned(
+          left: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            onPressed: resetNotification,
+            backgroundColor: Colors.green,
+            child: const Icon(Icons.notifications),
           ),
-          CustomTextInput(
-            width: textInputW,
-            labelText: "제목",
-            textController: titleTextController,
-            keyboardType: TextInputType.multiline,
-            minLines: 1,
-            maxLines: 1,
-          ),
-          CustomTextInput(
-            width: textInputW,
-            labelText: "내용",
-            textController: contentTextController,
-            keyboardType: TextInputType.multiline,
-            minLines: 1,
-            maxLines: 5,
-          ),
-          ElevatedButton(
-              onPressed: () {
-                print(
-                    '${titleTextController.text} ${contentTextController.text}');
-              },
-              child: const Text('완료'))
-        ],
-      );
+        )
+      ]);
     } else {
-      component = const Center(
+      body = const Center(
           child: Text("Loading...", style: TextStyle(fontSize: 25)));
     }
 
     return Scaffold(
-      body: SafeArea(child: component),
+      body: SafeArea(child: body),
       floatingActionButton: FloatingActionButton(
         onPressed: getPosition,
+        backgroundColor: Colors.amber,
         child: const Icon(Icons.refresh),
       ),
     );
