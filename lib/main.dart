@@ -84,7 +84,6 @@ class HomePageState extends State<HomePage> {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestPermission();
-    await showNotification();
   }
 
   Future showNotification() async {
