@@ -70,6 +70,8 @@ class HomePage extends StatefulWidget {
 
 class HomePageState extends State<HomePage> {
   Position? position;
+  final placeTextController = TextEditingController();
+  final personTextController = TextEditingController();
   final titleTextController = TextEditingController();
   final contentTextController = TextEditingController();
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -168,11 +170,13 @@ class HomePageState extends State<HomePage> {
             ));
   }
 
-  Future postRecord(latitude, longitude, title, content) async {
+  Future postRecord(latitude, longitude, place, person, title, content) async {
     var url = Uri.http('3.37.230.24', 'api/record');
     var body = json.encode({
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
+      'place': place,
+      'person': person,
       'title': title,
       'content': content,
     });
@@ -198,6 +202,7 @@ class HomePageState extends State<HomePage> {
     if (position != null) {
       Size size = MediaQuery.of(context).size;
       double textInputW = size.width * 0.8;
+      double textInputHalfW = size.width * 0.35;
       double mapW = size.width;
       double mapH = size.height * 0.3;
 
@@ -215,6 +220,31 @@ class HomePageState extends State<HomePage> {
               zoomLevel: 2,
               showMapTypeControl: false,
               showZoomControl: false,
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
+                CustomTextInput(
+                  width: textInputHalfW,
+                  labelText: "장소",
+                  textController: placeTextController,
+                  keyboardType: TextInputType.multiline,
+                  minLines: 1,
+                  maxLines: 5,
+                ),
+                const Spacer(),
+                CustomTextInput(
+                  width: textInputHalfW,
+                  labelText: "사람",
+                  textController: personTextController,
+                  keyboardType: TextInputType.multiline,
+                  minLines: 1,
+                  maxLines: 5,
+                ),
+                const Spacer(),
+              ],
             ),
             CustomTextInput(
               width: textInputW,
@@ -234,8 +264,22 @@ class HomePageState extends State<HomePage> {
             ),
             ElevatedButton(
                 onPressed: () {
-                  postRecord(position?.latitude, position?.longitude,
-                      titleTextController.text, contentTextController.text);
+                  if (titleTextController.text == "") {
+                    toast("제목이 비어있음");
+                    return;
+                  }
+                  postRecord(
+                      position?.latitude,
+                      position?.longitude,
+                      placeTextController.text,
+                      personTextController.text,
+                      titleTextController.text,
+                      contentTextController.text);
+
+                  placeTextController.clear();
+                  personTextController.clear();
+                  titleTextController.clear();
+                  contentTextController.clear();
                 },
                 style: ElevatedButton.styleFrom(primary: Colors.deepOrange),
                 child: const Text(
